@@ -1,16 +1,40 @@
 [project]
 name = "bsm-pricer"
 version = "0.1.0"
-description = "Add your description here"
+description = "Black-Scholes-Merton European option pricer with analytic Greeks and dividend support."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "numpy>=2.4.6",
-    "pandas>=3.0.3",
     "scipy>=1.17.1",
 ]
+
+[project.scripts]
+bsm-pricer = "bsm_pricer.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bsm_pricer"]
 
 [dependency-groups]
 dev = [
     "pytest>=9.1.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
 ]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src", "tests"]
+ignore_missing_imports = true
+warn_unused_ignores = true

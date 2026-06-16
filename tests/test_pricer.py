@@ -1,14 +1,8 @@
-import sys
-from pathlib import Path
-
 import numpy as np
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-
-from pricer import bsm_pricer, calc_factors, validate_inputs  # noqa: E402
-import greeks as G  # noqa: E402
-
+from bsm_pricer import greeks as G
+from bsm_pricer.pricer import bsm_pricer, calc_factors, validate_inputs
 
 # --- Reference parameters ---
 BASE = dict(S=100.0, K=100.0, T=1.0, r=0.05, sigma=0.2)
@@ -98,7 +92,8 @@ def test_gamma_matches_finite_difference(option_type):
 @pytest.mark.parametrize("option_type", ["call", "put"])
 def test_vega_matches_finite_difference(option_type):
     h = 1e-4
-    fd = (_price(option_type, sigma=GP["sigma"] + h) - _price(option_type, sigma=GP["sigma"] - h)) / (2 * h)
+    fd = (_price(option_type, sigma=GP["sigma"] + h)
+          - _price(option_type, sigma=GP["sigma"] - h)) / (2 * h)
     # vega is scaled per 1% move, fd is raw (per 1.0)
     assert G.vega(**GP, option_type=option_type) * 100 == pytest.approx(fd, abs=1e-3)
 

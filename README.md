@@ -1,7 +1,7 @@
 # bsm-pricer
 
-A small, well-tested Black–Scholes–Merton option pricer with analytic Greeks and
-continuous dividend-yield support.
+A small, well-tested **Black–Scholes–Merton** option pricer with analytic Greeks and
+continuous dividend-yield support, packaged as an installable Python library with a CLI.
 
 ## Features
 
@@ -9,23 +9,28 @@ continuous dividend-yield support.
 - Continuous dividend yield `q` (set `q=0` for the classic no-dividend model)
 - Analytic Greeks: delta, gamma, vega, theta, rho (plus an `all_greeks` helper)
 - Input validation with clear error messages
-- Finite-difference-verified test suite
+- Finite-difference-verified test suite (every Greek checked against a bump of the pricer)
+- Linted (ruff), type-checked (mypy), and run in CI (GitHub Actions)
 
 ## Requirements
 
 - Python ≥ 3.12
-- numpy, scipy, pandas (managed with [uv](https://docs.astral.sh/uv/))
+- numpy, scipy — managed with [uv](https://docs.astral.sh/uv/)
+
+## Install
 
 ```bash
-uv sync
+uv sync          # creates the venv and installs the package + dev tools
 ```
+
+This installs `bsm_pricer` into the environment, so it imports cleanly with no path hacks.
 
 ## Usage
 
+### Python
+
 ```python
-import sys; sys.path.insert(0, "src")   # or install the package
-from pricer import bsm_pricer
-from greeks import delta, gamma, vega, theta, rho, all_greeks
+from bsm_pricer import bsm_pricer, all_greeks
 
 # Price a 1-year ATM call: spot=100, strike=100, r=5%, vol=20%
 price = bsm_pricer(S=100, K=100, T=1, r=0.05, sigma=0.2, option_type="call")
@@ -34,16 +39,24 @@ price = bsm_pricer(S=100, K=100, T=1, r=0.05, sigma=0.2, option_type="call")
 # With a 3% continuous dividend yield
 price = bsm_pricer(100, 100, 1, 0.05, 0.2, option_type="call", q=0.03)
 
-# Greeks
+# Greeks (single dict)
 g = all_greeks(100, 100, 1, 0.05, 0.2, option_type="call")
 # {'delta': ..., 'gamma': ..., 'vega': ..., 'theta': ..., 'rho': ...}
 ```
 
-You can also run either module directly for a demo:
+### Command line
 
 ```bash
-uv run python src/pricer.py
-uv run python src/greeks.py
+uv run bsm-pricer -S 100 -K 100 -T 1 -r 0.05 -v 0.2 --type call --greeks
+```
+
+```
+call price: 10.4506
+  delta: +0.636831
+  gamma: +0.018762
+   vega: +0.375240
+  theta: -0.017573
+    rho: +0.532325
 ```
 
 ## Parameters
@@ -75,7 +88,7 @@ Put  = K * e^(-rT) * N(-d2) - S * e^(-qT) * N(-d1)
 
 ## Greeks and scaling conventions
 
-The Greeks return values in the following units (documented in each function's
+The Greeks return values in the following units (also documented in each function's
 docstring). This matters when interpreting the numbers:
 
 | Greek   | Sensitivity to | Returned unit                          |
@@ -88,22 +101,27 @@ docstring). This matters when interpreting the numbers:
 
 `gamma` and `vega` are identical for calls and puts.
 
-## Tests
+## Development
 
 ```bash
-uv run pytest tests/ -q
+uv run ruff check .     # lint
+uv run mypy             # type check
+uv run pytest -q        # tests
 ```
 
-The suite checks textbook reference values, put–call parity (with and without
+The test suite checks textbook reference values, put–call parity (with and without
 dividends), expiry/intrinsic behavior, input validation, and verifies every Greek
 against a central finite-difference bump of the pricer.
 
 ## Project layout
 
 ```
-src/
-  pricer.py   # bsm_pricer, calc_factors, validate_inputs
-  greeks.py   # delta, gamma, vega, theta, rho, all_greeks
+src/bsm_pricer/
+  __init__.py   # public API
+  pricer.py     # bsm_pricer, calc_factors, validate_inputs
+  greeks.py     # delta, gamma, vega, theta, rho, all_greeks
+  cli.py        # bsm-pricer command-line entry point
 tests/
   test_pricer.py
+.github/workflows/ci.yml
 ```
