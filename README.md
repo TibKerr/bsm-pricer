@@ -125,5 +125,6 @@ src/bsm_pricer/
 tests/
   test_pricer.py
   test_greeks.py
+  test_array.py
 .github/workflows/ci.yml
 ```
