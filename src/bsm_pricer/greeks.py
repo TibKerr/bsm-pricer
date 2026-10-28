@@ -1,5 +1,8 @@
 """Analytic Black-Scholes-Merton Greeks with continuous dividend support.
 
+Scalar interface over ``array.py``, where the math lives: takes plain floats and
+``"call"`` / ``"put"``, and returns plain floats.
+
 Scaling conventions (also documented per function):
     delta, gamma : raw, per 1.0 change in spot
     vega         : per +1 percentage point (0.01) change in volatility
@@ -7,10 +10,8 @@ Scaling conventions (also documented per function):
     rho          : per +1 percentage point (0.01) change in the rate
 """
 
-import numpy as np
-from scipy.stats import norm
-
-from .pricer import OptionType, calc_factors, validate_inputs
+from . import array
+from .pricer import OptionType, validate_inputs
 
 
 def delta(
@@ -40,19 +41,7 @@ def delta(
         ValueError: if any input is outside its valid domain.
     """
     validate_inputs(S, K, T, r, sigma, option_type, q)
-
-    # At expiry delta is a step: 1 (or -1) in the money, 0 otherwise.
-    if T == 0:
-        if option_type == "call":
-            return 1.0 if S > K else 0.0
-        return -1.0 if S < K else 0.0
-
-    d1, _ = calc_factors(S, K, T, r, sigma, q)
-    disc_q = np.exp(-q * T)
-
-    if option_type == "call":
-        return float(disc_q * norm.cdf(d1))
-    return float(-disc_q * norm.cdf(-d1))
+    return float(array.delta(S, K, T, r, sigma, option_type == "call", q))
 
 
 def gamma(
@@ -84,14 +73,7 @@ def gamma(
         ValueError: if any input is outside its valid domain.
     """
     validate_inputs(S, K, T, r, sigma, option_type, q)
-
-    if T == 0:
-        return 0.0
-
-    d1, _ = calc_factors(S, K, T, r, sigma, q)
-    disc_q = np.exp(-q * T)
-
-    return float(disc_q * norm.pdf(d1) / (S * sigma * np.sqrt(T)))
+    return float(array.gamma(S, K, T, r, sigma, option_type == "call", q))
 
 
 def vega(
@@ -123,15 +105,7 @@ def vega(
         ValueError: if any input is outside its valid domain.
     """
     validate_inputs(S, K, T, r, sigma, option_type, q)
-
-    if T == 0:
-        return 0.0
-
-    d1, _ = calc_factors(S, K, T, r, sigma, q)
-    disc_q = np.exp(-q * T)
-
-    raw_vega = S * disc_q * norm.pdf(d1) * np.sqrt(T)
-    return float(raw_vega / 100.0)
+    return float(array.vega(S, K, T, r, sigma, option_type == "call", q))
 
 
 def theta(
@@ -163,23 +137,7 @@ def theta(
         ValueError: if any input is outside its valid domain.
     """
     validate_inputs(S, K, T, r, sigma, option_type, q)
-
-    if T == 0:
-        return 0.0
-
-    d1, d2 = calc_factors(S, K, T, r, sigma, q)
-    disc_q = np.exp(-q * T)
-    disc_r = np.exp(-r * T)
-
-    # Shared first term, then the type-dependent rate/dividend terms.
-    decay = -(S * disc_q * norm.pdf(d1) * sigma) / (2 * np.sqrt(T))
-
-    if option_type == "call":
-        raw_theta = decay - r * K * disc_r * norm.cdf(d2) + q * S * disc_q * norm.cdf(d1)
-    else:
-        raw_theta = decay + r * K * disc_r * norm.cdf(-d2) - q * S * disc_q * norm.cdf(-d1)
-
-    return float(raw_theta / 365.0)
+    return float(array.theta(S, K, T, r, sigma, option_type == "call", q))
 
 
 def rho(
@@ -211,19 +169,7 @@ def rho(
         ValueError: if any input is outside its valid domain.
     """
     validate_inputs(S, K, T, r, sigma, option_type, q)
-
-    if T == 0:
-        return 0.0
-
-    _, d2 = calc_factors(S, K, T, r, sigma, q)
-    disc_r = np.exp(-r * T)
-
-    if option_type == "call":
-        raw_rho = K * T * disc_r * norm.cdf(d2)
-    else:
-        raw_rho = -K * T * disc_r * norm.cdf(-d2)
-
-    return float(raw_rho / 100.0)
+    return float(array.rho(S, K, T, r, sigma, option_type == "call", q))
 
 
 def all_greeks(

@@ -126,16 +126,21 @@ uv run pytest -q        # tests
 
 The test suite checks textbook reference values, put–call parity (with and without
 dividends), expiry/intrinsic behavior, input validation, and verifies every Greek
-against a central finite-difference bump of the pricer.
+against a central finite-difference bump of the pricer. The array tests repeat the
+parity and finite-difference checks over a 144-row grid (calls and puts, in/at/out of
+the money, expired, negative rates and dividends) and fail on any numpy warning.
 
 ## Project layout
+
+All the math lives in `array.py`; `pricer.py` and `greeks.py` are scalar wrappers
+around it that take `"call"` / `"put"` and return plain floats.
 
 ```
 src/bsm_pricer/
   __init__.py   # public API
-  pricer.py     # bsm_pricer, calc_factors, validate_inputs
-  greeks.py     # delta, gamma, vega, theta, rho, all_greeks
-  array.py      # vectorized bsm_pricer and calc_factors over numpy arrays
+  array.py      # vectorized bsm_pricer, calc_factors, Greeks, all_greeks
+  pricer.py     # scalar bsm_pricer, calc_factors, validate_inputs
+  greeks.py     # scalar delta, gamma, vega, theta, rho, all_greeks
   cli.py        # bsm-pricer command-line entry point
 tests/
   test_pricer.py

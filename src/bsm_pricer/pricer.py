@@ -1,9 +1,12 @@
-"""Black-Scholes-Merton pricing for European options with continuous dividends."""
+"""Black-Scholes-Merton pricing for European options with continuous dividends.
+
+Scalar interface over ``array.py``, where the math lives: takes plain floats and
+``"call"`` / ``"put"``, and returns plain floats.
+"""
 
 from typing import Literal
 
-import numpy as np
-from scipy.stats import norm
+from . import array
 
 OptionType = Literal["call", "put"]
 
@@ -29,14 +32,8 @@ def calc_factors(
     Returns:
         Tuple of the ``d1`` and ``d2`` factors.
     """
-    # Isolate numerator and denominator for readability.
-    numerator = np.log(S / K) + (r - q + (sigma**2 / 2)) * T
-    denominator = sigma * np.sqrt(T)
-
-    d1 = numerator / denominator
-    d2 = d1 - denominator
-
-    return d1, d2
+    d1, d2 = array.calc_factors(S, K, T, r, sigma, q)
+    return float(d1), float(d2)
 
 
 def validate_inputs(
@@ -104,18 +101,4 @@ def bsm_pricer(
         ValueError: if any input is outside its valid domain.
     """
     validate_inputs(S, K, T, r, sigma, option_type, q)
-
-    # At expiry the option is worth its intrinsic value.
-    if T == 0:
-        return max(0.0, S - K) if option_type == "call" else max(0.0, K - S)
-
-    d1, d2 = calc_factors(S, K, T, r, sigma, q)
-    disc_q = np.exp(-q * T)
-    disc_r = np.exp(-r * T)
-
-    if option_type == "call":
-        price = S * disc_q * norm.cdf(d1) - K * disc_r * norm.cdf(d2)
-    else:
-        price = K * disc_r * norm.cdf(-d2) - S * disc_q * norm.cdf(-d1)
-
-    return float(price)
+    return float(array.bsm_pricer(S, K, T, r, sigma, option_type == "call", q))

@@ -1,4 +1,8 @@
-"""Tests for array.py: every array function matches its scalar counterpart."""
+"""Tests for array.py: parity, finite differences, shapes, and validation.
+
+The scalar functions are wrappers over this module, so these tests check the
+math directly instead of comparing against them.
+"""
 
 import itertools
 
@@ -46,7 +50,47 @@ def _scalar_results(scalar_function):
     ])
 
 
-# --- Array vs scalar -------------------------------------------------------
+# --- Pricing ---------------------------------------------------------------
+
+def test_put_call_parity():
+    calls = array.bsm_pricer(**{**PARAMS, "is_call": True})
+    puts = array.bsm_pricer(**{**PARAMS, "is_call": False})
+    S, K, T, r, q = (PARAMS[name] for name in ("S", "K", "T", "r", "q"))
+    np.testing.assert_allclose(calls - puts, S * np.exp(-q * T) - K * np.exp(-r * T), atol=1e-10)
+
+
+# --- Greeks vs finite differences -----------------------------------------
+
+# Rows with time left; the finite-difference bumps need T > 0.
+LIVE = {name: values[PARAMS["T"] > 0] for name, values in PARAMS.items()}
+
+
+def _price(**overrides):
+    return array.bsm_pricer(**{**LIVE, **overrides})
+
+
+@pytest.mark.parametrize("greek, bumped, scale", [
+    ("delta", "S", 1.0),       # raw
+    ("vega", "sigma", 100.0),  # per 1% move
+    ("rho", "r", 100.0),       # per 1% move
+    ("theta", "T", -365.0),    # theta = -dPrice/dT, per day
+])
+def test_greek_matches_finite_difference(greek, bumped, scale):
+    h = 1e-4
+    fd = (_price(**{bumped: LIVE[bumped] + h})
+          - _price(**{bumped: LIVE[bumped] - h})) / (2 * h)
+    result = getattr(array, greek)(**LIVE) * scale
+    np.testing.assert_allclose(result, fd, rtol=1e-5, atol=1e-6)
+
+
+def test_gamma_matches_finite_difference():
+    h = 1e-3
+    fd = (_price(S=LIVE["S"] + h) - 2 * _price()
+          + _price(S=LIVE["S"] - h)) / h**2
+    np.testing.assert_allclose(array.gamma(**LIVE), fd, rtol=1e-5, atol=1e-6)
+
+
+# --- Scalar wrappers agree with arrays -------------------------------------
 
 @pytest.mark.parametrize("name", list(SCALAR_FUNCTIONS))
 def test_matches_scalar(name):
