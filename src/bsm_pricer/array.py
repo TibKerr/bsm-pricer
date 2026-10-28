@@ -162,3 +162,250 @@ def bsm_pricer(
     # At expiry the option is worth its intrinsic value.
     intrinsic = np.where(is_call, np.maximum(S - K, 0.0), np.maximum(K - S, 0.0))
     return np.where(expired, intrinsic, price)
+
+
+def delta(
+    S: ArrayLike,
+    K: ArrayLike,
+    T: ArrayLike,
+    r: ArrayLike,
+    sigma: ArrayLike,
+    is_call: ArrayLike = True,
+    q: ArrayLike = 0.0,
+) -> FloatArray:
+    """Sensitivity of option price to a change in spot (dPrice/dS), element-wise.
+
+    Args:
+        S: spot price of asset
+        K: strike price of option
+        T: time to expiry in years
+        r: annualized risk-free rate
+        sigma: annualized implied volatility
+        is_call: ``True`` for a call, ``False`` for a put
+        q: annualized continuous dividend yield
+
+    Returns:
+        Delta, in price units per 1.0 change in spot.
+
+    Raises:
+        ValueError: if any input is outside its valid domain.
+    """
+    S, K, T, r, sigma, is_call, q = _prepare_inputs(S, K, T, r, sigma, is_call, q)
+
+    expired = T == 0
+    T_safe = np.where(expired, 1.0, T)
+
+    d1, _ = calc_factors(S, K, T_safe, r, sigma, q)
+    disc_q = np.exp(-q * T_safe)
+
+    value = np.where(is_call, disc_q * norm.cdf(d1), -disc_q * norm.cdf(-d1))
+
+    # At expiry delta is a step: 1 (or -1) in the money, 0 otherwise.
+    at_expiry = np.where(is_call, np.where(S > K, 1.0, 0.0), np.where(S < K, -1.0, 0.0))
+    return np.where(expired, at_expiry, value)
+
+
+def gamma(
+    S: ArrayLike,
+    K: ArrayLike,
+    T: ArrayLike,
+    r: ArrayLike,
+    sigma: ArrayLike,
+    is_call: ArrayLike = True,
+    q: ArrayLike = 0.0,
+) -> FloatArray:
+    """Sensitivity of delta to a change in spot (d2Price/dS2), element-wise.
+
+    Identical for calls and puts.
+
+    Args:
+        S: spot price of asset
+        K: strike price of option
+        T: time to expiry in years
+        r: annualized risk-free rate
+        sigma: annualized implied volatility
+        is_call: ``True`` for a call, ``False`` for a put
+        q: annualized continuous dividend yield
+
+    Returns:
+        Gamma, in delta units per 1.0 change in spot.
+
+    Raises:
+        ValueError: if any input is outside its valid domain.
+    """
+    S, K, T, r, sigma, is_call, q = _prepare_inputs(S, K, T, r, sigma, is_call, q)
+
+    expired = T == 0
+    T_safe = np.where(expired, 1.0, T)
+
+    d1, _ = calc_factors(S, K, T_safe, r, sigma, q)
+    disc_q = np.exp(-q * T_safe)
+
+    value = disc_q * norm.pdf(d1) / (S * sigma * np.sqrt(T_safe))
+    return np.where(expired, 0.0, value)
+
+
+def vega(
+    S: ArrayLike,
+    K: ArrayLike,
+    T: ArrayLike,
+    r: ArrayLike,
+    sigma: ArrayLike,
+    is_call: ArrayLike = True,
+    q: ArrayLike = 0.0,
+) -> FloatArray:
+    """Sensitivity of option price to a change in volatility, element-wise.
+
+    Identical for calls and puts. Scaled per +1 percentage point of vol.
+
+    Args:
+        S: spot price of asset
+        K: strike price of option
+        T: time to expiry in years
+        r: annualized risk-free rate
+        sigma: annualized implied volatility
+        is_call: ``True`` for a call, ``False`` for a put
+        q: annualized continuous dividend yield
+
+    Returns:
+        Vega, in price units per +1% (0.01) change in sigma.
+
+    Raises:
+        ValueError: if any input is outside its valid domain.
+    """
+    S, K, T, r, sigma, is_call, q = _prepare_inputs(S, K, T, r, sigma, is_call, q)
+
+    expired = T == 0
+    T_safe = np.where(expired, 1.0, T)
+
+    d1, _ = calc_factors(S, K, T_safe, r, sigma, q)
+    disc_q = np.exp(-q * T_safe)
+
+    raw_vega = S * disc_q * norm.pdf(d1) * np.sqrt(T_safe)
+    return np.where(expired, 0.0, raw_vega / 100.0)
+
+
+def theta(
+    S: ArrayLike,
+    K: ArrayLike,
+    T: ArrayLike,
+    r: ArrayLike,
+    sigma: ArrayLike,
+    is_call: ArrayLike = True,
+    q: ArrayLike = 0.0,
+) -> FloatArray:
+    """Sensitivity of option price to the passage of time (time decay), element-wise.
+
+    Scaled per calendar day.
+
+    Args:
+        S: spot price of asset
+        K: strike price of option
+        T: time to expiry in years
+        r: annualized risk-free rate
+        sigma: annualized implied volatility
+        is_call: ``True`` for a call, ``False`` for a put
+        q: annualized continuous dividend yield
+
+    Returns:
+        Theta, in price units per 1 day of decay.
+
+    Raises:
+        ValueError: if any input is outside its valid domain.
+    """
+    S, K, T, r, sigma, is_call, q = _prepare_inputs(S, K, T, r, sigma, is_call, q)
+
+    expired = T == 0
+    T_safe = np.where(expired, 1.0, T)
+
+    d1, d2 = calc_factors(S, K, T_safe, r, sigma, q)
+    disc_q = np.exp(-q * T_safe)
+    disc_r = np.exp(-r * T_safe)
+
+    # Shared first term, then the type-dependent rate/dividend terms.
+    decay = -(S * disc_q * norm.pdf(d1) * sigma) / (2 * np.sqrt(T_safe))
+    call_theta = decay - r * K * disc_r * norm.cdf(d2) + q * S * disc_q * norm.cdf(d1)
+    put_theta = decay + r * K * disc_r * norm.cdf(-d2) - q * S * disc_q * norm.cdf(-d1)
+    raw_theta = np.where(is_call, call_theta, put_theta)
+
+    return np.where(expired, 0.0, raw_theta / 365.0)
+
+
+def rho(
+    S: ArrayLike,
+    K: ArrayLike,
+    T: ArrayLike,
+    r: ArrayLike,
+    sigma: ArrayLike,
+    is_call: ArrayLike = True,
+    q: ArrayLike = 0.0,
+) -> FloatArray:
+    """Sensitivity of option price to a change in the risk-free rate, element-wise.
+
+    Scaled per +1 percentage point of rate.
+
+    Args:
+        S: spot price of asset
+        K: strike price of option
+        T: time to expiry in years
+        r: annualized risk-free rate
+        sigma: annualized implied volatility
+        is_call: ``True`` for a call, ``False`` for a put
+        q: annualized continuous dividend yield
+
+    Returns:
+        Rho, in price units per +1% (0.01) change in r.
+
+    Raises:
+        ValueError: if any input is outside its valid domain.
+    """
+    S, K, T, r, sigma, is_call, q = _prepare_inputs(S, K, T, r, sigma, is_call, q)
+
+    expired = T == 0
+    T_safe = np.where(expired, 1.0, T)
+
+    _, d2 = calc_factors(S, K, T_safe, r, sigma, q)
+    disc_r = np.exp(-r * T_safe)
+
+    raw_rho = np.where(
+        is_call,
+        K * T_safe * disc_r * norm.cdf(d2),
+        -K * T_safe * disc_r * norm.cdf(-d2),
+    )
+    return np.where(expired, 0.0, raw_rho / 100.0)
+
+
+def all_greeks(
+    S: ArrayLike,
+    K: ArrayLike,
+    T: ArrayLike,
+    r: ArrayLike,
+    sigma: ArrayLike,
+    is_call: ArrayLike = True,
+    q: ArrayLike = 0.0,
+) -> dict[str, FloatArray]:
+    """Return every Greek for the given options in a single dict of arrays.
+
+    Args:
+        S: spot price of asset
+        K: strike price of option
+        T: time to expiry in years
+        r: annualized risk-free rate
+        sigma: annualized implied volatility
+        is_call: ``True`` for a call, ``False`` for a put
+        q: annualized continuous dividend yield
+
+    Returns:
+        Dict mapping ``"delta"``, ``"gamma"``, ``"vega"``, ``"theta"`` and
+        ``"rho"`` to their arrays, scaled as in the individual functions.
+
+    Raises:
+        ValueError: if any input is outside its valid domain.
+    """
+    return {
+        "delta": delta(S, K, T, r, sigma, is_call, q),
+        "gamma": gamma(S, K, T, r, sigma, is_call, q),
+        "vega": vega(S, K, T, r, sigma, is_call, q),
+        "theta": theta(S, K, T, r, sigma, is_call, q),
+        "rho": rho(S, K, T, r, sigma, is_call, q),
+    }

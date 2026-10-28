@@ -44,6 +44,21 @@ g = all_greeks(100, 100, 1, 0.05, 0.2, option_type="call")
 # {'delta': ..., 'gamma': ..., 'vega': ..., 'theta': ..., 'rho': ...}
 ```
 
+### Arrays
+
+`bsm_pricer.array` has the same functions, but every input can be an array, so
+thousands of options are priced in one call. Inputs broadcast together, and
+`is_call` takes a bool (or bool array) instead of `"call"` / `"put"`.
+
+```python
+import numpy as np
+from bsm_pricer import array
+
+spots = np.array([95.0, 100.0, 105.0])
+prices = array.bsm_pricer(spots, 100, 1, 0.05, 0.2, is_call=[True, False, True])
+g = array.all_greeks(spots, 100, 1, 0.05, 0.2)  # dict of arrays
+```
+
 ### Command line
 
 ```bash
