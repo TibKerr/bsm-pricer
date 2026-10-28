@@ -64,14 +64,17 @@ def validate_inputs(
     """
     if option_type not in ("call", "put"):
         raise ValueError("option_type must be 'call' or 'put'")
-    if S <= 0:
-        raise ValueError(f"S (spot price) must be positive, got {S}")
-    if K <= 0:
-        raise ValueError(f"K (strike price) must be positive, got {K}")
-    if sigma <= 0:
-        raise ValueError(f"sigma (volatility) must be positive, got {sigma}")
-    if T < 0:
-        raise ValueError(f"T (time to expiry) must be non-negative, got {T}")
+
+    # r and q may be any value, including negative.
+    checks = [
+        (S <= 0, f"S (spot price) must be positive, got {S}"),
+        (K <= 0, f"K (strike price) must be positive, got {K}"),
+        (sigma <= 0, f"sigma (volatility) must be positive, got {sigma}"),
+        (T < 0, f"T (time to expiry) must be non-negative, got {T}"),
+    ]
+    for is_bad, message in checks:
+        if is_bad:
+            raise ValueError(message)
 
 
 def bsm_pricer(
@@ -96,6 +99,9 @@ def bsm_pricer(
 
     Returns:
         Theoretical price of the option.
+
+    Raises:
+        ValueError: if any input is outside its valid domain.
     """
     validate_inputs(S, K, T, r, sigma, option_type, q)
 
@@ -104,10 +110,12 @@ def bsm_pricer(
         return max(0.0, S - K) if option_type == "call" else max(0.0, K - S)
 
     d1, d2 = calc_factors(S, K, T, r, sigma, q)
+    disc_q = np.exp(-q * T)
+    disc_r = np.exp(-r * T)
 
     if option_type == "call":
-        price = S * np.exp(-q * T) * norm.cdf(d1) - K * np.exp(-r * T) * norm.cdf(d2)
+        price = S * disc_q * norm.cdf(d1) - K * disc_r * norm.cdf(d2)
     else:
-        price = K * np.exp(-r * T) * norm.cdf(-d2) - S * np.exp(-q * T) * norm.cdf(-d1)
+        price = K * disc_r * norm.cdf(-d2) - S * disc_q * norm.cdf(-d1)
 
     return float(price)

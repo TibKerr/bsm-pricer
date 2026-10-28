@@ -120,8 +120,10 @@ src/bsm_pricer/
   __init__.py   # public API
   pricer.py     # bsm_pricer, calc_factors, validate_inputs
   greeks.py     # delta, gamma, vega, theta, rho, all_greeks
+  array.py      # vectorized bsm_pricer and calc_factors over numpy arrays
   cli.py        # bsm-pricer command-line entry point
 tests/
   test_pricer.py
+  test_greeks.py
 .github/workflows/ci.yml
 ```
